@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "audiobook-generator"
+version = "0.1.0"
+description = ""
+authors = ["Marcus Tanner <kritiosboy@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+kokoro = "^0.9.4"
+soundfile = "^0.13.1"
+ipython = "^9.6.0"
+sounddevice = "^0.5.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
