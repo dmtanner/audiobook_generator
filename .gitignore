@@ -1,2 +1,8 @@
-# Audio Files
-*.wav
+# Ebooks
+ebooks/
+
+# Audiobook Output
+audiobooks/
+
+# macOS
+.DS_Store
