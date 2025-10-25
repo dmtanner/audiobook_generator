@@ -15,6 +15,8 @@ sounddevice = "^0.5.3"
 ebooklib = "^0.18"
 beautifulsoup4 = "^4.12.0"
 lxml = "^5.0.0"
+pydub = "^0.25.1"
+mutagen = "^1.47.0"
 
 
 [build-system]

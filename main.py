@@ -7,8 +7,35 @@ import soundfile as sf
 import sounddevice as sd
 from ebooklib import epub, ITEM_DOCUMENT
 from bs4 import BeautifulSoup
+from pydub import AudioSegment
+from mutagen.mp4 import MP4, MP4Cover
 import os
 import re
+import numpy as np
+import tempfile
+
+
+def get_book_metadata(epub_path):
+    """
+    Extract metadata from an EPUB file.
+    
+    Args:
+        epub_path: Path to the EPUB file
+        
+    Returns:
+        Dictionary with metadata (title, author, etc.)
+    """
+    book = epub.read_epub(epub_path)
+    
+    metadata = {
+        'title': book.get_metadata('DC', 'title')[0][0] if book.get_metadata('DC', 'title') else 'Unknown Title',
+        'author': book.get_metadata('DC', 'creator')[0][0] if book.get_metadata('DC', 'creator') else 'Unknown Author',
+        'publisher': book.get_metadata('DC', 'publisher')[0][0] if book.get_metadata('DC', 'publisher') else '',
+        'date': book.get_metadata('DC', 'date')[0][0] if book.get_metadata('DC', 'date') else '',
+        'language': book.get_metadata('DC', 'language')[0][0] if book.get_metadata('DC', 'language') else 'en',
+    }
+    
+    return metadata
 
 
 def extract_chapters_from_epub(epub_path):
@@ -54,7 +81,68 @@ def extract_chapters_from_epub(epub_path):
     return chapters
 
 
-def generate_audiobook(epub_path, output_dir="audiobook_output", voice='bm_daniel', speed=1, play_audio=False):
+def save_audio_as_m4b(audio_data, output_file, metadata):
+    """
+    Save audio data as M4B format with metadata.
+    
+    Args:
+        audio_data: numpy array of audio samples
+        output_file: Path to output M4B file
+        metadata: Dictionary containing book metadata (title, author, chapter_num, etc.)
+    """
+    # Create a temporary WAV file
+    with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
+        temp_wav_path = temp_wav.name
+        sf.write(temp_wav_path, audio_data, 24000)
+    
+    try:
+        # Load the WAV file with pydub
+        audio = AudioSegment.from_wav(temp_wav_path)
+        
+        # Export as M4B (AAC codec in MP4 container)
+        # M4B is essentially M4A with audiobook metadata
+        audio.export(
+            output_file,
+            format='ipod',  # iPod format creates M4A/M4B compatible files
+            codec='aac',
+            bitrate='64k',  # Good quality for spoken word
+            parameters=['-strict', '-2']  # Allow experimental AAC encoder
+        )
+        
+        # Add metadata using mutagen
+        audio_file = MP4(output_file)
+        
+        # Set standard tags
+        if 'album' in metadata:
+            audio_file['\xa9alb'] = metadata['album']  # Album (book title)
+        if 'title' in metadata:
+            audio_file['\xa9nam'] = metadata['title']  # Track title (chapter title)
+        if 'author' in metadata:
+            audio_file['\xa9ART'] = metadata['author']  # Artist (author)
+            audio_file['aART'] = metadata['author']    # Album artist
+        if 'genre' in metadata:
+            audio_file['\xa9gen'] = metadata['genre']  # Genre
+        if 'date' in metadata and metadata['date']:
+            audio_file['\xa9day'] = metadata['date']  # Release date
+        if 'comment' in metadata:
+            audio_file['\xa9cmt'] = metadata['comment']  # Comment
+        
+        # Track number (chapter number)
+        if 'track_num' in metadata and 'total_tracks' in metadata:
+            audio_file['trkn'] = [(metadata['track_num'], metadata['total_tracks'])]
+        
+        # Mark as audiobook
+        audio_file['stik'] = [2]  # 2 = Audiobook in iTunes
+        
+        audio_file.save()
+        
+    finally:
+        # Clean up temporary file
+        if os.path.exists(temp_wav_path):
+            os.remove(temp_wav_path)
+
+
+def generate_audiobook(epub_path, output_dir="audiobooks", voice='af_heart', speed=1, play_audio=False):
     """
     Generate audiobook from EPUB file.
     
@@ -68,10 +156,15 @@ def generate_audiobook(epub_path, output_dir="audiobook_output", voice='bm_danie
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
     
-    # Extract chapters
+    # Extract book metadata
     print(f"Reading EPUB file: {epub_path}")
+    book_metadata = get_book_metadata(epub_path)
+    print(f"Book: {book_metadata['title']} by {book_metadata['author']}")
+    
+    # Extract chapters
     chapters = extract_chapters_from_epub(epub_path)
     print(f"\nFound {len(chapters)} chapters\n")
+    total_chapters = len(chapters)
     
     # Initialize TTS pipeline
     pipeline = KPipeline(lang_code='a')
@@ -97,12 +190,24 @@ def generate_audiobook(epub_path, output_dir="audiobook_output", voice='bm_danie
         
         # Concatenate all audio segments for this chapter
         if chapter_audio:
-            import numpy as np
             full_audio = np.concatenate(chapter_audio)
             
-            # Save chapter audio
-            output_file = os.path.join(output_dir, f"chapter_{chapter_num:02d}.wav")
-            sf.write(output_file, full_audio, 24000)
+            # Prepare metadata for this chapter
+            chapter_metadata = {
+                'album': book_metadata['title'],
+                'title': f"Chapter {chapter_num}: {title}",
+                'author': book_metadata['author'],
+                'genre': 'Audiobook',
+                'date': book_metadata['date'],
+                'track_num': chapter_num,
+                'total_tracks': total_chapters,
+                'comment': f"Generated with Kokoro TTS"
+            }
+            
+            # Save chapter audio as M4B
+            output_file = os.path.join(output_dir, f"chapter_{chapter_num:02d}.m4b")
+            print(f"Encoding to M4B format...")
+            save_audio_as_m4b(full_audio, output_file, chapter_metadata)
             print(f"Saved: {output_file}")
     
     print(f"\n{'='*60}")
@@ -128,13 +233,14 @@ def test_audio():
 if __name__ == "__main__":
     # test_audio()
     # Example usage
-    # Replace 'your_book.epub' with your actual EPUB file path
-    epub_file = "ebooks/the-woman-in-white.epub"
+    # Replace with your actual EPUB file path
+    title = "the-art-of-war"
+    epub_file = f"ebooks/{title}.epub"
     
     if os.path.exists(epub_file):
         generate_audiobook(
             epub_path=epub_file,
-            output_dir="audiobook_output",
+            output_dir=f"audiobooks/{title}",
             voice='bm_daniel',
             speed=1,
             play_audio=False  # Set to True if you want to hear it as it generates
