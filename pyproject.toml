@@ -1,24 +1,25 @@
-[tool.poetry]
+[project]
 name = "audiobook-generator"
 version = "0.1.0"
 description = ""
-authors = ["Marcus Tanner <kritiosboy@gmail.com>"]
+authors = [{ name = "Marcus Tanner", email = "kritiosboy@gmail.com" }]
+requires-python = ">=3.11,<3.13"
 readme = "README.md"
-package-mode = false
+dependencies = [
+    "kokoro>=0.9.4,<0.10",
+    "soundfile>=0.13.1,<0.14",
+    "ipython>=9.6.0,<10",
+    "sounddevice>=0.5.3,<0.6",
+    "ebooklib>=0.18,<0.19",
+    "beautifulsoup4>=4.12.0,<5",
+    "lxml>=5.0.0,<6",
+    "pydub>=0.25.1,<0.26",
+    "mutagen>=1.47.0,<2",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.11,<3.13"
-kokoro = "^0.9.4"
-soundfile = "^0.13.1"
-ipython = "^9.6.0"
-sounddevice = "^0.5.3"
-ebooklib = "^0.18"
-beautifulsoup4 = "^4.12.0"
-lxml = "^5.0.0"
-pydub = "^0.25.1"
-mutagen = "^1.47.0"
-
+[tool.uv]
+package = false
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
